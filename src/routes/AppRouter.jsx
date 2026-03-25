@@ -4,6 +4,7 @@ import Notificaciones from "../pages/Notificaciones";
 import Asambleas from "../pages/Asambleas";
 import Multas from "../pages/Multas";
 import Login from "../pages/Login";
+import Confirm from "../pages/Confirm";
 import DashboardLayout from "../layouts/DashboardLayout";
 import MensajesDeptos from "../pages/MensajesDeptos";
 
@@ -18,11 +19,17 @@ function AppRouter() {
   const [auth, setAuth] = useState(false);
 
   useEffect(() => {
-    const isAuth = localStorage.getItem("auth");
-    if (isAuth === "true") {
+    const token = localStorage.getItem("token");
+    if (token) {
       setAuth(true);
     }
   }, []);
+
+  // Allow the confirmation route to be accessed without being authenticated
+  const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+  if (pathname.startsWith("/confirm")) {
+    return <Confirm />;
+  }
 
   if (!auth) {
     return <Login onLogin={() => setAuth(true)} />;

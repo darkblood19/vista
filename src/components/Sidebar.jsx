@@ -2,8 +2,23 @@ import { Link } from "react-router-dom";
 import "../styles/personas.css";
 
 function Sidebar() {
-  const logout = () => {
-    localStorage.removeItem("auth");
+  const logout = async () => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      try {
+        await fetch("/api/logout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+        });
+      } catch (err) {
+        console.error("Error en logout:", err);
+      }
+    }
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
     window.location.reload();
   };
 

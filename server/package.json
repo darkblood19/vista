@@ -1,0 +1,21 @@
+{
+  "name": "condominio-server",
+  "version": "1.0.0",
+  "description": "Backend server for condominio app",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.1",
+    "mysql2": "^3.6.5",
+    "nodemailer": "^6.9.7"
+  }
+}
