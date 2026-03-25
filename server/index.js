@@ -56,18 +56,49 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ message: "Token invalido o expirado" });
     }
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    // Verificar que el usuario exista y esté activo
+    const user = await getUserById(session.userId);
+    if (!user) {
+      return res.status(401).json({ message: "Usuario no encontrado" });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({ message: "Cuenta desactivada" });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
       if (err) {
         return res.status(403).json({ message: "Token invalido" });
       }
 
-      req.user = user;
+      // Guardar información del usuario en la solicitud
+      req.user = { userId: user.id, role: user.role, email: user.email, name: user.name };
+      req.session = session;
       next();
     });
   } catch (err) {
     console.error("Error en autenticacion:", err);
     res.status(500).json({ message: "Error en autenticacion" });
   }
+};
+
+// Middleware para validar que el usuario tenga un rol específico
+const authorizeRole = (allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: "No autenticado" });
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ 
+        message: `Acceso denegado. Se requiere uno de estos roles: ${allowedRoles.join(", ")}`,
+        requiredRoles: allowedRoles,
+        userRole: req.user.role
+      });
+    }
+
+    next();
+  };
 };
 
 function hashPassword(password) {
@@ -344,6 +375,143 @@ app.post("/api/change-password", authenticateToken, async (req, res) => {
     });
   } catch (err) {
     console.error("Error cambiando contrasena:", err);
+    res.status(500).json({ message: "Error en el servidor" });
+  }
+});
+
+// ============ ENDPOINTS DE PERFIL Y ROLES ============
+
+app.get("/api/me", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const dbStatus = getDatabaseStatus();
+    if (!dbStatus.ok) {
+      return res.status(503).json({ message: dbStatus.message, detail: dbStatus.detail });
+    }
+
+    const user = await getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    res.json({
+      ok: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        confirmed: user.confirmed,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error("Error en /api/me:", err);
+    res.status(500).json({ message: "Error en el servidor" });
+  }
+});
+
+app.post("/api/users/:id/role", authenticateToken, authorizeRole(["admin"]), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    if (!role) {
+      return res.status(400).json({ message: "Rol requerido" });
+    }
+
+    const validRoles = ["admin", "moderator", "user"];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ message: `Rol inválido. Debe ser uno de: ${validRoles.join(", ")}` });
+    }
+
+    const dbStatus = getDatabaseStatus();
+    if (!dbStatus.ok) {
+      return res.status(503).json({ message: dbStatus.message, detail: dbStatus.detail });
+    }
+
+    const user = await getUserById(id);
+    if (!user) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    // No permitir que un usuario se quite permisos a sí mismo
+    if (req.user.userId === parseInt(id) && role !== "admin") {
+      return res.status(400).json({ message: "No puedes quitarte permisos de admin a ti mismo" });
+    }
+
+    await updateUser(user.email, { role });
+
+    res.json({
+      ok: true,
+      message: `Rol de ${user.name} actualizado a ${role}`,
+      user: { id: user.id, email: user.email, name: user.name, role },
+    });
+  } catch (err) {
+    console.error("Error en /api/users/:id/role:", err);
+    res.status(500).json({ message: "Error en el servidor" });
+  }
+});
+
+app.post("/api/users/:id/toggle-active", authenticateToken, authorizeRole(["admin"]), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const dbStatus = getDatabaseStatus();
+    if (!dbStatus.ok) {
+      return res.status(503).json({ message: dbStatus.message, detail: dbStatus.detail });
+    }
+
+    const user = await getUserById(id);
+    if (!user) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    // No permitir desactivarse a uno mismo
+    if (req.user.userId === parseInt(id)) {
+      return res.status(400).json({ message: "No puedes desactivar tu propia cuenta" });
+    }
+
+    const newIsActive = !user.isActive;
+    await updateUser(user.email, { isActive: newIsActive });
+
+    // Si se desactiva, cerrar todas las sesiones del usuario
+    if (!newIsActive) {
+      await deleteAllUserTokens(user.id);
+    }
+
+    res.json({
+      ok: true,
+      message: `Cuenta de ${user.name} ${newIsActive ? "activada" : "desactivada"}`,
+      user: { id: user.id, email: user.email, name: user.name, isActive: newIsActive },
+    });
+  } catch (err) {
+    console.error("Error en /api/users/:id/toggle-active:", err);
+    res.status(500).json({ message: "Error en el servidor" });
+  }
+});
+
+app.get("/api/users", authenticateToken, authorizeRole(["admin"]), async (req, res) => {
+  try {
+    const dbStatus = getDatabaseStatus();
+    if (!dbStatus.ok) {
+      return res.status(503).json({ message: dbStatus.message, detail: dbStatus.detail });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      const [users] = await conn.query(
+        "SELECT id, name, email, role, confirmed, isActive, createdAt FROM users ORDER BY createdAt DESC"
+      );
+
+      res.json({ ok: true, users });
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error("Error en /api/users:", err);
     res.status(500).json({ message: "Error en el servidor" });
   }
 });

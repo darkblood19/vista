@@ -44,7 +44,7 @@ async function getUserByEmail(email) {
   const conn = await pool.getConnection();
   try {
     const [rows] = await conn.query(
-      "SELECT id, name, email, password, confirmed, confirmToken, resetCode, resetCodeExpires, createdAt FROM users WHERE email = ?",
+      "SELECT id, name, email, password, role, confirmed, confirmToken, resetCode, resetCodeExpires, isActive, createdAt FROM users WHERE email = ?",
       [email]
     );
     return rows[0] || null;
@@ -57,7 +57,7 @@ async function getUserById(id) {
   const conn = await pool.getConnection();
   try {
     const [rows] = await conn.query(
-      "SELECT id, name, email, password, confirmed, confirmToken, resetCode, resetCodeExpires, createdAt FROM users WHERE id = ?",
+      "SELECT id, name, email, password, role, confirmed, confirmToken, resetCode, resetCodeExpires, isActive, createdAt FROM users WHERE id = ?",
       [id]
     );
     return rows[0] || null;
@@ -101,7 +101,7 @@ async function getUserByToken(token) {
   const conn = await pool.getConnection();
   try {
     const [rows] = await conn.query(
-      "SELECT id, name, email, password, confirmed, confirmToken, resetCode, resetCodeExpires, createdAt FROM users WHERE confirmToken = ?",
+      "SELECT id, name, email, password, role, confirmed, confirmToken, resetCode, resetCodeExpires, isActive, createdAt FROM users WHERE confirmToken = ?",
       [token]
     );
     return rows[0] || null;
@@ -114,7 +114,7 @@ async function getUserByResetCode(code) {
   const conn = await pool.getConnection();
   try {
     const [rows] = await conn.query(
-      "SELECT id, name, email, password, confirmed, confirmToken, resetCode, resetCodeExpires, createdAt FROM users WHERE resetCode = ? AND resetCodeExpires > NOW()",
+      "SELECT id, name, email, password, role, confirmed, confirmToken, resetCode, resetCodeExpires, isActive, createdAt FROM users WHERE resetCode = ? AND resetCodeExpires > NOW()",
       [code]
     );
     return rows[0] || null;
