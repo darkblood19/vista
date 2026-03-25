@@ -40,4 +40,34 @@ async function sendConfirmationEmail(recipientEmail, name, confirmUrl) {
   }
 }
 
-export { sendConfirmationEmail };
+// Send password reset code
+async function sendPasswordResetCode(recipientEmail, name, resetCode) {
+  const mailOptions = {
+    from: `"Condominio" <${process.env.GMAIL_USER}>`,
+    to: recipientEmail,
+    subject: "Código para recuperar tu contraseña - Condominio",
+    html: `
+      <h2>Recuperación de contraseña</h2>
+      <p>Hola ${name},</p>
+      <p>Hemos recibido una solicitud para recuperar tu contraseña. Usa el siguiente código para continuar:</p>
+      <div style="background-color: #f0f0f0; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+        <h1 style="color: #333; letter-spacing: 5px; font-family: monospace;">${resetCode}</h1>
+      </div>
+      <p><strong>Este código expira en 15 minutos.</strong></p>
+      <p>Si no solicitaste recuperar tu contraseña, ignora este correo.</p>
+      <hr />
+      <p style="font-size: 12px; color: #666;">Este correo fue enviado automáticamente. No respondas a este correo.</p>
+    `,
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Correo de recuperación enviado:", info.response);
+    return true;
+  } catch (err) {
+    console.error("Error al enviar correo de recuperación:", err);
+    return false;
+  }
+}
+
+export { sendConfirmationEmail, sendPasswordResetCode };

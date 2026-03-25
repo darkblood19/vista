@@ -8,6 +8,7 @@ import {
   pool,
   getUserByEmail,
   getUserById,
+  getUserByResetCode,
   createUser,
   updateUser,
   getUserByToken,
@@ -18,7 +19,7 @@ import {
   deleteAllUserTokens,
   getDatabaseStatus,
 } from "./db.js";
-import { sendConfirmationEmail } from "./mailer.js";
+import { sendConfirmationEmail, sendPasswordResetCode } from "./mailer.js";
 
 dotenv.config();
 
@@ -75,6 +76,10 @@ function hashPassword(password) {
 
 function verifyPassword(password, hash) {
   return hashPassword(password) === hash;
+}
+
+function generateResetCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 app.post("/api/register", async (req, res) => {
@@ -215,6 +220,87 @@ app.post("/api/logout", authenticateToken, async (req, res) => {
     res.json({ ok: true, message: "Sesion cerrada" });
   } catch (err) {
     console.error("Error en logout:", err);
+    res.status(500).json({ message: "Error en el servidor" });
+  }
+});
+
+app.post("/api/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Correo requerido" });
+    }
+
+    const dbStatus = getDatabaseStatus();
+    if (!dbStatus.ok) {
+      return res.status(503).json({ message: dbStatus.message, detail: dbStatus.detail });
+    }
+
+    const user = await getUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({ message: "Correo no encontrado" });
+    }
+
+    const resetCode = generateResetCode();
+    const resetCodeExpires = new Date(Date.now() + 15 * 60 * 1000); // Expira en 15 minutos
+
+    await updateUser(email, { resetCode, resetCodeExpires });
+
+    const emailSent = await sendPasswordResetCode(email, user.name, resetCode);
+
+    if (!emailSent) {
+      return res.status(503).json({ message: "No se pudo enviar el correo. Intenta más tarde." });
+    }
+
+    res.json({
+      ok: true,
+      message: "Código de recuperación enviado a tu correo. Válido por 15 minutos.",
+    });
+  } catch (err) {
+    console.error("Error en forgot-password:", err);
+    res.status(500).json({ message: "Error en el servidor" });
+  }
+});
+
+app.post("/api/reset-password", async (req, res) => {
+  try {
+    const { resetCode, newPassword } = req.body;
+
+    if (!resetCode || !newPassword) {
+      return res.status(400).json({ message: "Código y nueva contraseña requeridos" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres" });
+    }
+
+    const dbStatus = getDatabaseStatus();
+    if (!dbStatus.ok) {
+      return res.status(503).json({ message: dbStatus.message, detail: dbStatus.detail });
+    }
+
+    const user = await getUserByResetCode(resetCode);
+    if (!user) {
+      return res.status(400).json({ message: "Código inválido o expirado" });
+    }
+
+    // Actualizar contraseña y limpiar reset code
+    await updateUser(user.email, {
+      password: hashPassword(newPassword),
+      resetCode: null,
+      resetCodeExpires: null,
+    });
+
+    // Cerrar todas las sesiones
+    await deleteAllUserTokens(user.id);
+
+    res.json({
+      ok: true,
+      message: "Contraseña recuperada exitosamente. Inicia sesión con tu nueva contraseña.",
+    });
+  } catch (err) {
+    console.error("Error en reset-password:", err);
     res.status(500).json({ message: "Error en el servidor" });
   }
 });

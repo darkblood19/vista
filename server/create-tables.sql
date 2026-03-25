@@ -12,6 +12,8 @@ CREATE TABLE
         password VARCHAR(255) NOT NULL,
         confirmed BOOLEAN DEFAULT FALSE,
         confirmToken VARCHAR(255) DEFAULT NULL,
+        resetCode VARCHAR(6) DEFAULT NULL,
+        resetCodeExpires DATETIME DEFAULT NULL,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     );
@@ -32,6 +34,8 @@ CREATE TABLE
 CREATE INDEX idx_users_email ON users (email);
 
 CREATE INDEX idx_users_confirmToken ON users (confirmToken);
+
+CREATE INDEX idx_users_resetCode ON users (resetCode);
 
 CREATE INDEX idx_sessionTokens_token ON sessionTokens (token);
 
