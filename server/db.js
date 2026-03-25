@@ -156,6 +156,15 @@ async function deleteAllUserTokens(userId) {
   }
 }
 
+async function deleteUserDeviceToken(userId, deviceId) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.query("DELETE FROM sessionTokens WHERE userId = ? AND deviceId = ?", [userId, deviceId]);
+  } finally {
+    conn.release();
+  }
+}
+
 export {
   pool,
   getDatabaseStatus,
@@ -167,5 +176,6 @@ export {
   createSessionToken,
   getSessionToken,
   deleteSessionToken,
+  deleteUserDeviceToken,
   deleteAllUserTokens,
 };

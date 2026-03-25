@@ -14,6 +14,7 @@ import {
   createSessionToken,
   getSessionToken,
   deleteSessionToken,
+  deleteUserDeviceToken,
   deleteAllUserTokens,
   getDatabaseStatus,
 } from "./db.js";
@@ -185,9 +186,14 @@ app.post("/api/login", async (req, res) => {
       return res.status(401).json({ message: "Contrasena incorrecta" });
     }
 
+    // Eliminar token anterior de este dispositivo (si existe)
+    await deleteUserDeviceToken(user.id, deviceId);
+
+    // Crear nuevo token JWT
     const token = jwt.sign({ userId: user.id, deviceId }, JWT_SECRET, { expiresIn: "7d" });
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
+    // Guardar nueva sesión
     await createSessionToken(user.id, token, deviceId, expiresAt);
 
     res.json({
@@ -222,6 +228,10 @@ app.post("/api/change-password", authenticateToken, async (req, res) => {
       return res.status(400).json({ message: "Contrasena actual y nueva requeridas" });
     }
 
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ message: "La nueva contraseña debe ser diferente" });
+    }
+
     const dbStatus = getDatabaseStatus();
     if (!dbStatus.ok) {
       return res.status(503).json({ message: dbStatus.message, detail: dbStatus.detail });
@@ -236,12 +246,15 @@ app.post("/api/change-password", authenticateToken, async (req, res) => {
       return res.status(401).json({ message: "Contrasena actual incorrecta" });
     }
 
+    // Actualizar contraseña
     await updateUser(user.email, { password: hashPassword(newPassword) });
+
+    // Cerrar sesión en todos los dispositivos
     await deleteAllUserTokens(userId);
 
     res.json({
       ok: true,
-      message: "Contrasena cambiada. Sesion cerrada en todos los dispositivos",
+      message: "Contraseña cambiada exitosamente. Sesión cerrada en todos los dispositivos. Por favor, inicia sesión nuevamente.",
     });
   } catch (err) {
     console.error("Error cambiando contrasena:", err);
